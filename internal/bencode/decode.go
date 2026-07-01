@@ -32,7 +32,7 @@ func (d *Decoder) Decode() (any, error) {
 	case b[0] >= '0' && b[0] <= '9':
 		return d.decodeString()
 	default:
-		return nil, fmt.Errorf("unknown symbol: %w", b[0])
+		return nil, fmt.Errorf("unknown symbol: %v", b[0])
 	}
 
 }

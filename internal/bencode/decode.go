@@ -15,11 +15,11 @@ func NewDecoder(r *bufio.Reader) *Decoder {
 	return &Decoder{r: r}
 }
 
-func (d *Decoder) Decode() (interface{}, error) {
+func (d *Decoder) Decode() (any, error) {
 
 	b, err := d.r.Peek(1)
 	if err != nil {
-		return nil, fmt.Errorf("unable to peek: %v", err)
+		return nil, fmt.Errorf("unable to peek: %w", err)
 	}
 
 	switch {
@@ -32,7 +32,7 @@ func (d *Decoder) Decode() (interface{}, error) {
 	case b[0] >= '0' && b[0] <= '9':
 		return d.decodeString()
 	default:
-		return nil, fmt.Errorf("Unknown symbol: %v", b[0])
+		return nil, fmt.Errorf("unknown symbol: %w", b[0])
 	}
 
 }
@@ -42,11 +42,11 @@ func (d *Decoder) decodeInt() (int64, error) {
 
 	data, err := d.r.ReadString('e')
 	if err != nil {
-		return 0, fmt.Errorf("decodeInt is unnable to decode string: %v", err)
+		return 0, fmt.Errorf("decodeInt is unable to decode string: %w", err)
 	}
 	val, err := strconv.ParseInt(data[:len(data)-1], 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("unable convert sttring to int: %v ", err)
+		return 0, fmt.Errorf("unable convert sttring to int: %w", err)
 	}
 	return val, nil
 }
@@ -54,13 +54,13 @@ func (d *Decoder) decodeInt() (int64, error) {
 func (d *Decoder) decodeString() (string, error) {
 	lengthStr, err := d.r.ReadString(':')
 	if err != nil {
-		return "", fmt.Errorf("unable to read string legth: %v", err)
+		return "", fmt.Errorf("unable to read string legth: %w", err)
 	}
 	lengthStr = lengthStr[:len(lengthStr)-1]
 
 	length, err := strconv.Atoi(lengthStr)
 	if err != nil {
-		return "", fmt.Errorf("unable to convert string length to int: %v", err)
+		return "", fmt.Errorf("unable to convert string length to int: %w", err)
 	}
 	buf := make([]byte, length)
 	_, err = io.ReadFull(d.r, buf)
@@ -71,14 +71,14 @@ func (d *Decoder) decodeString() (string, error) {
 
 }
 
-func (d *Decoder) decodeList() ([]interface{}, error) {
+func (d *Decoder) decodeList() ([]any, error) {
 	d.r.ReadByte()
 
 	var list []interface{}
 	for {
 		b, err := d.r.Peek(1)
 		if err != nil {
-			return nil, fmt.Errorf("unable to peek in decodeList: %v", err)
+			return nil, fmt.Errorf("unable to peek in decodeList: %w", err)
 		}
 		if b[0] == 'e' {
 			d.r.ReadByte()
@@ -87,21 +87,21 @@ func (d *Decoder) decodeList() ([]interface{}, error) {
 		//Рекурентно декодируем следующий элемент
 		item, err := d.Decode()
 		if err != nil {
-			return nil, fmt.Errorf("unable to decode in list cycle: %v", err)
+			return nil, fmt.Errorf("unable to decode in list cycle: %w", err)
 		}
 		list = append(list, item)
 	}
 	return list, nil
 }
 
-func (d *Decoder) decodeDict() (map[string]interface{}, error) {
+func (d *Decoder) decodeDict() (map[string]any, error) {
 	d.r.ReadByte()
 	dict := make(map[string]interface{})
 
 	for {
 		b, err := d.r.Peek(1)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to peek in decoderDict: %v", err)
+			return nil, fmt.Errorf("unable to peek in decoderDict: %w", err)
 		}
 
 		if b[0] == 'e' {
@@ -111,12 +111,12 @@ func (d *Decoder) decodeDict() (map[string]interface{}, error) {
 
 		key, err := d.decodeString()
 		if err != nil {
-			return nil, fmt.Errorf("Unable to decode key: %v", err)
+			return nil, fmt.Errorf("unable to decode key: %w", err)
 		}
 
 		val, err := d.Decode()
 		if err != nil {
-			return nil, fmt.Errorf("Unable to decode value: %v", err)
+			return nil, fmt.Errorf("unable to decode value: %w", err)
 		}
 		dict[key] = val
 

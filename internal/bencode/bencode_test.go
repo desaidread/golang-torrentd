@@ -1,9 +1,7 @@
 package bencode
 
 import (
-	"bufio"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -24,7 +22,7 @@ func TestDecodeInt(t *testing.T) {
 	// шаг 2: прогоняем каждый кейс
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDecoder(bufio.NewReader(strings.NewReader(tt.input)))
+			d := NewDecoder([]byte(tt.input))
 			got, err := d.decodeInt()
 
 			// проверяем, совпало ли наличие ошибки с ожиданием
@@ -56,7 +54,7 @@ func TestDecodeList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDecoder(bufio.NewReader(strings.NewReader(tt.input)))
+			d := NewDecoder([]byte(tt.input))
 			got, err := d.decodeList()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -81,7 +79,7 @@ func TestDecodeDict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDecoder(bufio.NewReader(strings.NewReader(tt.input)))
+			d := NewDecoder([]byte(tt.input))
 			got, err := d.decodeDict()
 			if err != nil {
 				t.Fatalf("unxepected error: %v", err)
@@ -108,7 +106,7 @@ func TestDecodeString(t *testing.T) {
 
 	for _, tt := range test {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDecoder(bufio.NewReader(strings.NewReader(tt.input)))
+			d := NewDecoder([]byte(tt.input))
 			got, err := d.decodeString()
 
 			if (err != nil) != tt.wantErr {
@@ -139,7 +137,7 @@ func TestDecode(t *testing.T) {
 
 	for _, tt := range test {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDecoder(bufio.NewReader(strings.NewReader(tt.input)))
+			d := NewDecoder([]byte(tt.input))
 			got, err := d.Decode()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

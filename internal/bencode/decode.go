@@ -2,18 +2,26 @@ package bencode
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
 )
 
 type Decoder struct {
-	r   *bufio.Reader
-	pos int
+	r         *bufio.Reader
+	pos       int
+	data      []byte
+	infoStart int
+	infoEnd   int
 }
 
-func NewDecoder(r *bufio.Reader) *Decoder {
-	return &Decoder{r: r}
+func NewDecoder(data []byte) *Decoder {
+	r := bufio.NewReader(bytes.NewReader(data))
+	return &Decoder{
+		r:    r,
+		data: data,
+	}
 }
 
 func (d *Decoder) Decode() (any, error) {
@@ -117,10 +125,19 @@ func (d *Decoder) decodeDict() (map[string]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to decode key: %w", err)
 		}
-
-		val, err := d.Decode()
-		if err != nil {
-			return nil, fmt.Errorf("unable to decode value: %w", err)
+		var val any
+		if key == "info" {
+			d.infoStart = d.pos
+			val, err = d.Decode()
+			if err != nil {
+				return nil, fmt.Errorf("unable to decode value: %w", err)
+			}
+			d.infoEnd = d.pos
+		} else {
+			val, err = d.Decode()
+			if err != nil {
+				return nil, fmt.Errorf("unable to decode value: %w", err)
+			}
 		}
 		dict[key] = val
 
@@ -150,4 +167,8 @@ func (d *Decoder) readFull(r io.Reader, buf []byte) (int, error) {
 	n, err := io.ReadFull(r, buf)
 	d.pos += n
 	return n, err
+}
+
+func (d *Decoder) GetInfoRaw() (InfoStart int, InfoEnd int) {
+	return d.infoStart, d.infoEnd
 }

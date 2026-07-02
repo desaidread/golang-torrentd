@@ -8,7 +8,8 @@ import (
 )
 
 type Decoder struct {
-	r *bufio.Reader
+	r   *bufio.Reader
+	pos int
 }
 
 func NewDecoder(r *bufio.Reader) *Decoder {
@@ -38,32 +39,35 @@ func (d *Decoder) Decode() (any, error) {
 }
 
 func (d *Decoder) decodeInt() (int64, error) {
-	d.r.ReadByte()
+	d.readByte()
 
-	data, err := d.r.ReadString('e')
+	data, err := d.readString('e')
 	if err != nil {
 		return 0, fmt.Errorf("decodeInt is unable to decode string: %w", err)
 	}
 	val, err := strconv.ParseInt(data[:len(data)-1], 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("unable convert sttring to int: %w", err)
+		return 0, fmt.Errorf("unable convert string to int: %w", err)
 	}
 	return val, nil
 }
 
 func (d *Decoder) decodeString() (string, error) {
-	lengthStr, err := d.r.ReadString(':')
+	lengthStr, err := d.readString(':')
 	if err != nil {
-		return "", fmt.Errorf("unable to read string legth: %w", err)
+		return "", fmt.Errorf("unable to read string length: %w", err)
 	}
 	lengthStr = lengthStr[:len(lengthStr)-1]
 
 	length, err := strconv.Atoi(lengthStr)
+	if length < 0 {
+		return "", fmt.Errorf("invalid string length: %d", length)
+	}
 	if err != nil {
 		return "", fmt.Errorf("unable to convert string length to int: %w", err)
 	}
 	buf := make([]byte, length)
-	_, err = io.ReadFull(d.r, buf)
+	_, err = d.readFull(d.r, buf)
 	if err != nil {
 		return "", err
 	}
@@ -72,16 +76,16 @@ func (d *Decoder) decodeString() (string, error) {
 }
 
 func (d *Decoder) decodeList() ([]any, error) {
-	d.r.ReadByte()
+	d.readByte()
 
-	var list []interface{}
+	var list []any
 	for {
 		b, err := d.r.Peek(1)
 		if err != nil {
 			return nil, fmt.Errorf("unable to peek in decodeList: %w", err)
 		}
 		if b[0] == 'e' {
-			d.r.ReadByte()
+			d.readByte()
 			break
 		}
 		//Рекурентно декодируем следующий элемент
@@ -95,8 +99,8 @@ func (d *Decoder) decodeList() ([]any, error) {
 }
 
 func (d *Decoder) decodeDict() (map[string]any, error) {
-	d.r.ReadByte()
-	dict := make(map[string]interface{})
+	d.readByte()
+	dict := make(map[string]any)
 
 	for {
 		b, err := d.r.Peek(1)
@@ -105,7 +109,7 @@ func (d *Decoder) decodeDict() (map[string]any, error) {
 		}
 
 		if b[0] == 'e' {
-			d.r.ReadByte()
+			d.readByte()
 			break
 		}
 
@@ -123,4 +127,27 @@ func (d *Decoder) decodeDict() (map[string]any, error) {
 	}
 
 	return dict, nil
+}
+
+// Обертки для изменения счётчика
+func (d *Decoder) readByte() (byte, error) {
+	byt, err := d.r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	d.pos += 1
+	return byt, err
+}
+
+func (d *Decoder) readString(delim byte) (string, error) {
+	res, err := d.r.ReadString(delim)
+	d.pos += len(res)
+	return res, err
+
+}
+
+func (d *Decoder) readFull(r io.Reader, buf []byte) (int, error) {
+	n, err := io.ReadFull(r, buf)
+	d.pos += n
+	return n, err
 }

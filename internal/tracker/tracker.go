@@ -8,8 +8,14 @@ import (
 	"net/url"
 	"strconv"
 	"torrentd/internal/bencode"
+	"torrentd/internal/peer"
 	"torrentd/internal/torrentfile"
 )
+
+type Response struct {
+	Interval int64
+	Peers    []peer.Peer
+}
 
 func BuildURL(tf *torrentfile.TorrentFile, peerID [20]byte, port int) (string, error) {
 	base, err := url.Parse(tf.Announce)
@@ -37,13 +43,13 @@ func GeneratePeerID() ([20]byte, error) {
 	var empty [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
-		return empty, fmt.Errorf("unnable to generate peerID: %w", err)
+		return empty, fmt.Errorf("unable to generate peerID: %w", err)
 	}
 
 	return peerID, nil
 }
 
-func Announce(tf *torrentfile.TorrentFile, peerID [20]byte, port int) (any, error) {
+func Announce(tf *torrentfile.TorrentFile, peerID [20]byte, port int) (*Response, error) {
 
 	URL, err := BuildURL(tf, peerID, port)
 	if err != nil {
@@ -51,7 +57,7 @@ func Announce(tf *torrentfile.TorrentFile, peerID [20]byte, port int) (any, erro
 	}
 	r, err := http.Get(URL)
 	if err != nil {
-		return nil, fmt.Errorf("Unablle to make get request: %w", err)
+		return nil, fmt.Errorf("Unable to make get request: %w", err)
 	}
 
 	defer r.Body.Close()
@@ -61,10 +67,32 @@ func Announce(tf *torrentfile.TorrentFile, peerID [20]byte, port int) (any, erro
 		return nil, fmt.Errorf("cannot extract data from reposponse.body: %w", err)
 	}
 
-	data, err := bencode.NewDecoder(responseData).Decode()
+	dataRaw, err := bencode.NewDecoder(responseData).Decode()
 	if err != nil {
 		return nil, err
 	}
-	return data, nil
+	top, ok := dataRaw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unable to conver response data")
+	}
 
+	interval, ok := top["interval"].(int64)
+	if !ok {
+		return nil, fmt.Errorf("nnable to conver response data")
+	}
+
+	peers, ok := top["peers"].(string)
+	if !ok {
+		return nil, fmt.Errorf("unable to conver response data")
+	}
+
+	peersList, err := peer.ParsePeers([]byte(peers))
+	if err != nil {
+		return nil, fmt.Errorf("Unable to parse peers: %w", err)
+	}
+
+	return &Response{
+		Interval: interval,
+		Peers:    peersList,
+	}, nil
 }

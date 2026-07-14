@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"torrentd/internal/peer"
 	"torrentd/internal/torrentfile"
 	"torrentd/internal/tracker"
 )
@@ -25,4 +26,19 @@ func main() {
 
 	fmt.Println(tracker.Announce(tf, peerID, 6881))
 
+	resp, err := tracker.Announce(tf, peerID, 6881)
+	if err != nil {
+		log.Fatal("failed to announce")
+	}
+
+	for _, v := range resp.Peers {
+		conn, err := peer.Connect(v, tf.InfoHash, peerID)
+		if err != nil {
+			fmt.Println("Пусто: ", v.IP, err)
+			continue
+		}
+		fmt.Println("Handshake выполнен успешно", v.IP)
+		conn.Close()
+
+	}
 }

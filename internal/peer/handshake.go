@@ -57,7 +57,7 @@ func Connect(p Peer, infoHash, peerID [20]byte) (net.Conn, error) {
 
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 
-	h := Handshake{Pstr: "BitTorent protocol", InfoHash: infoHash, PeerID: peerID}
+	h := Handshake{Pstr: "BitTorrent protocol", InfoHash: infoHash, PeerID: peerID}
 	_, err = conn.Write(h.Serialize())
 	if err != nil {
 		conn.Close()

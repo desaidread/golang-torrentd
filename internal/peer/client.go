@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 )
@@ -57,6 +58,17 @@ func (c *Client) SendUnchoke() error {
 
 func (c *Client) SendNotInterested() error {
 	msg := Message{ID: MsgNotInterested}
+	_, err := c.Conn.Write(msg.Serialize())
+	return err
+}
+
+func (c *Client) SendRequest(index, begin, length int) error {
+	payload := make([]byte, 12)
+	binary.BigEndian.PutUint32(payload[0:4], uint32(index))
+	binary.BigEndian.PutUint32(payload[4:8], uint32(begin))
+	binary.BigEndian.PutUint32(payload[8:12], uint32(length))
+
+	msg := Message{ID: MsgRequest, Payload: payload}
 	_, err := c.Conn.Write(msg.Serialize())
 	return err
 }

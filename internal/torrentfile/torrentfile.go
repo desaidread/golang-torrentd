@@ -94,3 +94,12 @@ func Open(path string) (*TorrentFile, error) {
 		PieceHashes: pieceHashes,
 	}, nil
 }
+
+func (t *TorrentFile) PieceBounds(index int) (start, end int) {
+	start = index * int(t.Length)
+	end = start + int(t.Length)
+	if end > int(t.Length) {
+		end = int(t.Length)
+	}
+	return start, end
+}

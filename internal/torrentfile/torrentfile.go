@@ -96,8 +96,8 @@ func Open(path string) (*TorrentFile, error) {
 }
 
 func (t *TorrentFile) PieceBounds(index int) (start, end int) {
-	start = index * int(t.Length)
-	end = start + int(t.Length)
+	start = index * int(t.PieceLength)
+	end = start + int(t.PieceLength)
 	if end > int(t.Length) {
 		end = int(t.Length)
 	}

@@ -130,32 +130,30 @@ func (c *Client) DownloadPiece(index, length int, hash [20]byte) ([]byte, error)
 				requested += blockSize
 			}
 		}
-	}
-
-	//Читаем сообщение
-	msg, err := ReadMessage(c.Conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if msg == nil {
-		return nil, nil
-	}
-
-	switch msg.ID {
-	case MsgUnchoke:
-		c.Choked = false
-	case MsgChoke:
-		c.Choked = true
-	case MsgPiece:
-		n, err := ParsePiece(index, buf, msg)
+		msg, err := ReadMessage(c.Conn)
 		if err != nil {
 			return nil, err
 		}
-		downloaded += n
-		backlog--
-	}
 
+		if msg == nil {
+			continue
+		}
+
+		//Читаем сообщение
+		switch msg.ID {
+		case MsgUnchoke:
+			c.Choked = false
+		case MsgChoke:
+			c.Choked = true
+		case MsgPiece:
+			n, err := ParsePiece(index, buf, msg)
+			if err != nil {
+				return nil, err
+			}
+			downloaded += n
+			backlog--
+		}
+	}
 	if sha1.Sum(buf) != hash {
 		return nil, fmt.Errorf("piece %d failed hash check", index)
 	}

@@ -4,41 +4,39 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 	"torrentd/internal/download"
-	"torrentd/internal/torrentfile"
-	"torrentd/internal/tracker"
 )
 
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("usage: torrentd <file.torrent>")
 	}
-	path := os.Args[1]
 
-	tf, err := torrentfile.Open(path)
+	m, err := download.NewManager()
 	if err != nil {
-		log.Fatal("open:", err)
+		log.Fatal("manager:", err)
 	}
 
-	peerID, err := tracker.GeneratePeerID()
+	id, err := m.AddTorrent(os.Args[1])
 	if err != nil {
-		log.Fatal("peerID:", err)
+		log.Fatal("add", err)
 	}
 
-	resp, err := tracker.Announce(tf, peerID, 6881)
-	if err != nil {
-		log.Fatal("announce:", err)
-	}
+	for {
+		t, ok := m.Get(id)
+		if !ok {
+			break
+		}
 
-	fmt.Printf("Пиров: %d, кусков: %d\n", len(resp.Peers), len(tf.PieceHashes))
+		done, total, status := t.Progress()
+		pct := float64(done) / float64(total) * 100
+		fmt.Printf("\r[%s] %d/%d кусков (%.1f%%)      ", status, done, total, pct)
 
-	buf, err := download.Download(tf, resp.Peers, peerID)
-	if err != nil {
-		log.Fatal("download:", err)
-	}
+		if status == "done" || status == "error" {
+			break
 
-	if err := os.WriteFile(tf.Name, buf, 0644); err != nil {
-		log.Fatal("write:", err)
+		}
+		time.Sleep(time.Second)
 	}
-	fmt.Println("Готово:", tf.Name)
 }

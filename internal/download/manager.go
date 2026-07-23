@@ -49,12 +49,11 @@ func (m *Manager) AddTorrent(path string) (string, error) {
 			t.setStatus("error")
 			return
 		}
-		buf, err := Download(t, tf, resp.Peers, m.peerId)
+		err = Download(t, tf, resp.Peers, m.peerId)
 		if err != nil {
 			t.setStatus("error")
 			return
 		}
-		os.WriteFile(tf.Name, buf, 0644)
 
 	}()
 	return id, nil
@@ -78,7 +77,18 @@ func (m *Manager) Get(id string) (*Torrent, bool) {
 	return t, ok
 }
 
-func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID [20]byte) ([]byte, error) {
+func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID [20]byte) error {
+
+	f, err := os.OpenFile(tf.Name, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if err := f.Truncate(tf.Length); err != nil {
+		return err
+	}
+
 	workQueue := make(chan pieceWork, len(tf.PieceHashes))
 	results := make(chan pieceResult)
 	t.setStatus("downloading")
@@ -94,14 +104,16 @@ func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID
 	}
 
 	var donePieces int
-	buf := make([]byte, tf.Length)
 	for donePieces < len(tf.PieceHashes) {
 		res := <-results
 		start, _ := tf.PieceBounds(res.index)
-		copy(buf[start:], res.buf)
+		if _, err := f.WriteAt(res.buf, int64(start)); err != nil {
+			t.setStatus("error")
+			return err
+		}
 		donePieces++
 		t.pieceDone()
 	}
 	t.setStatus("done")
-	return buf, nil
+	return nil
 }

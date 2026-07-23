@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"time"
 	"torrentd/internal/download"
 )
@@ -23,6 +24,15 @@ func main() {
 		log.Fatal("add", err)
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+
+	go func() {
+		<-sigChan
+		fmt.Println("Остановка...")
+		m.Shutdown()
+		os.Exit(0)
+	}()
 	for {
 		t, ok := m.Get(id)
 		if !ok {

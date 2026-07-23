@@ -1,12 +1,14 @@
 package download
 
 import (
+	"context"
 	"sync"
 )
 
 type Torrent struct {
 	Name       string
 	Total      int
+	cancel     context.CancelFunc
 	mu         sync.Mutex
 	downloaded int
 	status     string

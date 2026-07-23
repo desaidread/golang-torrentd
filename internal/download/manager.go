@@ -1,6 +1,7 @@
 package download
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -13,6 +14,7 @@ type Manager struct {
 	mu       sync.Mutex
 	torrents map[string]*Torrent
 	peerId   [20]byte
+	wg       sync.WaitGroup
 }
 
 func NewManager() (*Manager, error) {
@@ -32,9 +34,12 @@ func (m *Manager) AddTorrent(path string) (string, error) {
 		return "", err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	t := &Torrent{
-		Name:  tf.Name,
-		Total: len(tf.PieceHashes),
+		Name:   tf.Name,
+		Total:  len(tf.PieceHashes),
+		cancel: cancel,
 	}
 	t.setStatus("starting")
 
@@ -43,13 +48,16 @@ func (m *Manager) AddTorrent(path string) (string, error) {
 	m.torrents[id] = t
 	m.mu.Unlock()
 
+	m.wg.Add(1)
 	go func() {
+		defer m.wg.Done()
+		defer t.cancel()
 		resp, err := tracker.Announce(tf, m.peerId, 6881)
 		if err != nil {
 			t.setStatus("error")
 			return
 		}
-		err = Download(t, tf, resp.Peers, m.peerId)
+		err = Download(ctx, t, tf, resp.Peers, m.peerId)
 		if err != nil {
 			t.setStatus("error")
 			return
@@ -57,6 +65,47 @@ func (m *Manager) AddTorrent(path string) (string, error) {
 
 	}()
 	return id, nil
+}
+
+func (m *Manager) Shutdown() {
+	m.mu.Lock()
+	for _, t := range m.torrents {
+		t.cancel()
+	}
+	m.mu.Unlock()
+
+	m.wg.Wait()
+}
+
+func (m *Manager) Remove(id string) error {
+	m.mu.Lock()
+	t, ok := m.torrents[id]
+	if ok {
+		delete(m.torrents, id)
+	}
+	m.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("torrent %s not found", id)
+
+	}
+	t.cancel()
+	t.setStatus("removed")
+	return nil
+}
+
+func (m *Manager) Pause(id string) error {
+	m.mu.Lock()
+	t, ok := m.torrents[id]
+	m.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("torrent %s not found", id)
+	}
+
+	t.cancel()
+	t.setStatus("paused")
+	return nil
 }
 
 func (m *Manager) List() []*Torrent {
@@ -77,7 +126,13 @@ func (m *Manager) Get(id string) (*Torrent, bool) {
 	return t, ok
 }
 
-func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID [20]byte) error {
+func Download(
+	ctx context.Context,
+	t *Torrent,
+	tf *torrentfile.TorrentFile,
+	peers []peer.Peer,
+	peerID [20]byte,
+) error {
 
 	f, err := os.OpenFile(tf.Name, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -100,20 +155,25 @@ func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID
 	}
 
 	for _, p := range peers {
-		go worker(p, tf.InfoHash, peerID, workQueue, results)
+		go worker(ctx, p, tf.InfoHash, peerID, workQueue, results)
 	}
 
 	var donePieces int
 	for donePieces < len(tf.PieceHashes) {
-		res := <-results
-		start, _ := tf.PieceBounds(res.index)
-		if _, err := f.WriteAt(res.buf, int64(start)); err != nil {
-			t.setStatus("error")
-			return err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case res := <-results:
+			start, _ := tf.PieceBounds(res.index)
+			if _, err := f.WriteAt(res.buf, int64(start)); err != nil {
+				t.setStatus("error")
+				return err
+			}
+			donePieces++
+			t.pieceDone()
 		}
-		donePieces++
-		t.pieceDone()
 	}
 	t.setStatus("done")
 	return nil
+
 }

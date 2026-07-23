@@ -1,6 +1,9 @@
 package download
 
-import "torrentd/internal/peer"
+import (
+	"time"
+	"torrentd/internal/peer"
+)
 
 func worker(p peer.Peer,
 	infoHash, peerID [20]byte,
@@ -15,6 +18,7 @@ func worker(p peer.Peer,
 
 	for pw := range workQueue {
 		if !client.Bitfield.HasPiece(pw.index) {
+			time.Sleep(50 * time.Millisecond)
 			workQueue <- pw
 			continue
 		}

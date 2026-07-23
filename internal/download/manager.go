@@ -103,6 +103,5 @@ func Download(t *Torrent, tf *torrentfile.TorrentFile, peers []peer.Peer, peerID
 		t.pieceDone()
 	}
 	t.setStatus("done")
-	close(workQueue)
 	return buf, nil
 }

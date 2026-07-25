@@ -1,52 +1,48 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
-	"time"
+
+	"google.golang.org/grpc"
 	"torrentd/internal/download"
+	"torrentd/internal/rpc"
+	"torrentd/internal/rpcserver"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("usage: torrentd <file.torrent>")
-	}
-
-	m, err := download.NewManager()
+	// 1. движок
+	mgr, err := download.NewManager()
 	if err != nil {
 		log.Fatal("manager:", err)
 	}
 
-	id, err := m.AddTorrent(os.Args[1])
+	// 2. слушаем TCP-порт для gRPC
+	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatal("add", err)
+		log.Fatal("listen:", err)
 	}
 
+	// 3. создаём gRPC-сервер и регистрируем наш сервис
+	grpcServer := grpc.NewServer()
+	rpc.RegisterTorrentdServer(grpcServer, rpcserver.New(mgr))
+
+	// 4. graceful shutdown по Ctrl+C
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
-
 	go func() {
 		<-sigChan
-		fmt.Println("Остановка...")
-		m.Shutdown()
+		log.Println("останавливаюсь...")
+		grpcServer.GracefulStop() // перестать принимать, дать текущим RPC доработать
+		mgr.Shutdown()            // дождаться закачек
 		os.Exit(0)
 	}()
-	for {
-		t, ok := m.Get(id)
-		if !ok {
-			break
-		}
 
-		done, total, status := t.Progress()
-		pct := float64(done) / float64(total) * 100
-		fmt.Printf("\r[%s] %d/%d кусков (%.1f%%)      ", status, done, total, pct)
-
-		if status == "done" || status == "error" {
-			break
-
-		}
-		time.Sleep(time.Second)
+	// 5. запуск — блокирует
+	log.Println("gRPC слушает на :50051")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatal("serve:", err)
 	}
 }

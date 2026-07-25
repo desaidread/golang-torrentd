@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package torrentd;
+option go_package = "internal/rpc;rpc";
+
+service Torrentd{
+    rpc AddTorrent(AddTorrentRequest) returns (AddTorrentResponse);
+    rpc ListTorrents(ListTorrentsRequest) returns (ListTorrentsResponse);
+    rpc WatchProgress(WatchProgressRequest) returns (stream TorrentInfo);
+}
+ message AddTorrentRequest  { string path = 1; }
+  message AddTorrentResponse { string id = 1; }
+
+  message ListTorrentsRequest  {}
+  message ListTorrentsResponse { repeated TorrentInfo torrents = 1; }
+
+  message WatchProgressRequest { string id = 1; }
+
+  message TorrentInfo {
+    string id         = 1;
+    string name       = 2;
+    int32  downloaded = 3;
+    int32  total      = 4;
+    string status     = 5;
+  }

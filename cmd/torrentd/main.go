@@ -7,6 +7,7 @@ import (
 	"os/signal"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"torrentd/internal/download"
 	"torrentd/internal/rpc"
 	"torrentd/internal/rpcserver"
@@ -27,6 +28,7 @@ func main() {
 
 	// 3. создаём gRPC-сервер и регистрируем наш сервис
 	grpcServer := grpc.NewServer()
+	reflection.Register(grpcServer)
 	rpc.RegisterTorrentdServer(grpcServer, rpcserver.New(mgr))
 
 	// 4. graceful shutdown по Ctrl+C

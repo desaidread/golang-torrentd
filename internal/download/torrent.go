@@ -6,6 +6,7 @@ import (
 )
 
 type Torrent struct {
+	Id         string
 	Name       string
 	Total      int
 	cancel     context.CancelFunc

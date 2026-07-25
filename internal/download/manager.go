@@ -44,6 +44,7 @@ func (m *Manager) AddTorrent(path string) (string, error) {
 	t.setStatus("starting")
 
 	id := fmt.Sprintf("%x", tf.InfoHash)
+	t.Id = id
 	m.mu.Lock()
 	m.torrents[id] = t
 	m.mu.Unlock()

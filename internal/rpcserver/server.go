@@ -31,6 +31,7 @@ func (s *Server) ListTorrents(ctx context.Context, _ *rpc.ListTorrentsRequest) (
 	for _, t := range s.mgr.List() {
 		done, total, status := t.Progress()
 		infos = append(infos, &rpc.TorrentInfo{
+			Id:         t.Id,
 			Name:       t.Name,
 			Downloaded: int32(done),
 			Total:      int32(total),

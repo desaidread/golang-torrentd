@@ -27,24 +27,27 @@ bubbletea.
 ## Структура
 
 ```
-cmd/torrentd/          точка входа (демон)
+cmd/torrentd/          демон: gRPC-сервер + движок
+cmd/torrentctl/        TUI-клиент на bubbletea (общается с демоном по gRPC)
 internal/
   bencode/             декодер формата bencode
   torrentfile/         разбор .torrent, вычисление info_hash
   tracker/             запрос к трекеру, получение списка пиров
   peer/                протокол общения с пиром (TCP, хендшейк, сообщения)
   download/            движок: Manager (состояние торрентов) + скачивание кусков
+  rpc/                 сгенерённый код gRPC (из proto/)
+  rpcserver/           реализация gRPC-сервера поверх Manager
   config/              настройки
-proto/                 gRPC-контракт (.proto)          [в работе]
-internal/rpc/          сгенерённый код gRPC             [в работе]
-internal/rpcserver/    реализация сервера поверх Manager [в работе]
+proto/                 gRPC-контракт (.proto)
 ```
 
 Направление зависимостей — в одну сторону, без циклов:
 `rpcserver → download → peer → tracker → torrentfile → bencode`.
+TUI-клиент зависит только от сгенерённого `rpc` — с движком общается по сети.
 
 `download.Manager` держит карту раздач и их прогресс под мьютексом; каждая
 раздача качается в своей горутине, состояние безопасно читается снаружи.
+Отмена/pause/shutdown — через `context.Context`.
 
 ## Прогресс
 
@@ -56,27 +59,55 @@ internal/rpcserver/    реализация сервера поверх Manager 
 - [x] **download** — параллельное скачивание кусков (горутины + каналы) и сверка SHA-1
 - [x] **демон** — `Manager` с состоянием раздач, фоновая закачка, потокобезопасный прогресс
 - [x] **gRPC** — фасад над `Manager` (`AddTorrent` / `ListTorrents` / `WatchProgress`-стрим)
-- [ ] **TUI** — консольный клиент на bubbletea поверх gRPC
+- [x] **TUI** — консольный клиент на bubbletea поверх gRPC (список, добавление, стрим прогресса)
 - [x] запись на диск через `WriteAt` (не держать файл в RAM)
+- [ ] `Pause` / `Remove` в gRPC-контракте
+- [ ] переспрос трекера, докачка после обрыва, многофайловые раздачи
+- [ ] REST-гейтвей поверх того же gRPC (grpc-gateway)
 
 ## Запуск
 
-Из корня проекта (там, где `go.mod`):
+Демон и клиент — два отдельных бинаря. Из корня проекта (там, где `go.mod`).
+
+**Терминал 1 — демон** (поднимает gRPC на `:50051`, торренты добавляются по RPC):
 
 ```sh
-go run ./cmd/torrentd <путь/к/файлу.torrent>
+go run ./cmd/torrentd
 ```
 
-Пример:
+**Терминал 2 — TUI-клиент:**
 
 ```sh
-go run ./cmd/torrentd ./internal/torrentfile/testdata/debian-13.6.0-amd64-netinst.iso.torrent
+go run ./cmd/torrentctl
 ```
+
+В интерфейсе: `a` — добавить `.torrent` (ввести путь), `↑/↓` — выбор,
+`enter` — следить за прогрессом (стрим), `r` — обновить список, `q` — выход.
+Адрес демона можно переопределить через `TORRENTD_ADDR`.
 
 Детектор гонок (полезно для демона с горутинами):
 
 ```sh
-go run -race ./cmd/torrentd <путь/к/файлу.torrent>
+go run -race ./cmd/torrentd
+```
+
+### Сборка бинарей
+
+```sh
+go build -o bin/torrentd   ./cmd/torrentd
+go build -o bin/torrentctl ./cmd/torrentctl
+```
+
+### Отладка демона без TUI
+
+С включённым server reflection к демону можно ходить через `grpcurl`:
+
+```sh
+grpcurl -plaintext localhost:50051 list
+grpcurl -plaintext -d '{"path": "путь/к/файлу.torrent"}' \
+  localhost:50051 torrentd.Torrentd/AddTorrent
+grpcurl -plaintext -d '{"id": "<id>"}' \
+  localhost:50051 torrentd.Torrentd/WatchProgress   # стрим прогресса
 ```
 
 ## Тесты
@@ -87,11 +118,24 @@ go test ./...
 
 Фикстуры лежат в каталогах `testdata/` рядом с соответствующими пакетами.
 
+## Генерация gRPC-кода
+
+После правки `proto/torrentd.proto` перегенерировать Go-код:
+
+```sh
+protoc --go_out=. --go-grpc_out=. proto/torrentd.proto
+```
+
+Файлы `internal/rpc/*.pb.go` генерируются автоматически — руками не править.
+
 ## Заметки
 
-- `
+- `GRPC.md` — справочник по gRPC в Go (тулчейн, `.proto`, генерация, сервер/клиент,
+  стриминг), написан по ходу проекта.
+- `NOTES.md` — рабочие заметки и план по этапам.
 
 ## Требования
 
 - Go 1.26+
 - для gRPC-этапа: `protoc`, плагины `protoc-gen-go` / `protoc-gen-go-grpc`
+- опционально: `grpcurl` для отладки демона без клиента
